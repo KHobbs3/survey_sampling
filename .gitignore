@@ -1,0 +1,9 @@
+.DS_Store
+.Rproj.user/
+Delete after Aug 1/
+archive/
+validation/
+input/points/
+input/settlement_areas/
+input/population_rasters/
+sampling.Rproj
