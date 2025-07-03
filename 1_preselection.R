@@ -5,6 +5,7 @@ library(here)
 library(purrr)
 library(mapview)
 library(digest)
+library(jsonlite)
 
 # User input
 country <- "niger"
@@ -15,18 +16,16 @@ poly <- st_read(sprintf("input/settlement_areas/%s/osm_settlements_unconstrained
 
 # Read points
 points = st_read(list.files(sprintf("input/points/%s/",country),
-                            pattern = ".shp$",
+                            pattern = ".geojson$",
                             full.names = T)[1])
 
 points <- points %>%
-  select("OBJECTID",
-         "ADM3_NAME",
-         "NAME",
-         "LONGITUDE",
-         "LATITUDE",
-         "MILIEU",
-         "TYPELOCALI",
-         "Source")
+  select(
+         "name",
+         "place",
+         "osm_id",
+         "source",
+         "geometry")
 
 # Set-up file path
 filepath <- sprintf('/Users/kt/Documents/work/FEM/Family Planning/Radio Reach/cloudrf/output/gpkg/%s/%s', country, subfolder)
@@ -67,26 +66,38 @@ poly_in_stations <- poly[lengths(within_index) > 0,]
 poly_in_stations$geom_id <- sapply(st_as_text(st_geometry(poly_in_stations)), digest, algo = "sha1")
 
 # Spatial join points to polygon get ADM3_NAME, NAME, MILIEU, TYPELOCALI columns per polygon
-joined <- st_join(points, poly_in_stations)
+joined <- st_join(points, poly_in_stations, suffix = c("", "_polygon"))
 
-library(jsonlite)
 result <- joined %>%
   st_drop_geometry() %>%
   group_by(geom_id) %>%
   summarise(
-    ADM3_NAME = paste(unique(ADM3_NAME), collapse = "; "),
-    NAME = paste(unique(NAME), collapse = "; "),
-    MILIEU = paste(unique(MILIEU), collapse = "; "),
-    TYPELOCALI = paste(unique(TYPELOCALI), collapse = "; "),
+    name = paste(unique(name), collapse = "; "),
+    place = paste(unique(place), collapse = "; "),
+    osm_ids = paste(unique(osm_id), collapse = "; "),
     .groups = "drop"
   )
 
 # get geometry of polygons
 final <- poly_in_stations %>%
-  left_join(result, by = "geom_id") 
+  left_join(result, by = "geom_id", suffix = c("polygon", "")) 
 
 final_simple <- final %>%
-  select(geom_id,X_sum, ADM3_NAME, NAME, MILIEU, TYPELOCALI, geometry)
+  select(geom_id,X_sum, name, place, osm_id, geometry)
+
+# optional: add boundaries
+boundary_file <- list.files(sprintf('../../General Data/HDX Boundaries/%s/', country), full.names=T)[1]
+print(paste0("Reading boundaries for assignment: ", boundary_file))
+boundaries <- st_read(boundary_file) %>% 
+  select(
+    shapeName,
+    geometry
+  )
+
+# spatial join final to boundarys
+final_simple <- final_simple %>%
+  st_join(boundaries) 
+
 
 # Export
 st_write(final_simple, sprintf("input/settlement_areas/%s/%s_preselected.geojson",country, country),
@@ -94,6 +105,11 @@ st_write(final_simple, sprintf("input/settlement_areas/%s/%s_preselected.geojson
          delete_dsn = TRUE)
 
 # Visualize
-mapview(union_result, col.regions = "green") +
-  # mapview(poly, col.regions = 'orange') + 
-  mapview(final_simple, col.regions = "red")
+mapview(final_simple[!is.na(final_simple$shapeName),], col.regions = 'purple') +
+  mapview(final_simple[is.na(final_simple$shapeName),], col.regions = "red") + 
+    mapview(union_result, col.regions = "green") 
+
+
+any(sapply(final_simple$shapeName, is_null))
+
+       
