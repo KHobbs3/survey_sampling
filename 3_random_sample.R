@@ -12,15 +12,17 @@ n <- 25 # sample size
 # Read polygons
 regions <- st_read(sprintf("input/settlement_areas/%s/%s_preselected.geojson",country, country))
 
-# Filter minimum cluster population
+# Filter minimum cluster population and drop clusters outside of Niger boundaries
 # - we need at least 400 people in a town for it to be suitable
 # - this is a conservative assumption because WRA comprise around 25% of populations or less. 
 # I round down to 20% to be conservative. I expect 25% will be unavailable on day of interview.
 # npop = (n WRA to interview) / probability of interviewing WRA (20% x 25%) = 20/10% = 400
 regions_filt <- regions %>%
   filter(
-    X_sum >= 400
+    X_sum >= 400,
+    !is.na(shapeName)
   )
+
 
 # Clean result and add selection probabilities based off population proportion
 regions_sf <- regions_filt %>%
@@ -58,9 +60,16 @@ sample_sf <- regions_sf[idx_sample, ]
 # Summary of sample population
 summary(sample_sf$population)
 
-# Export
+# Export as spatial file
 st_write(sample_sf, here("output", "sample", country, sprintf("%s_sample_%s.geojson", country, n)), 
          append=F)
+
+# Export as csv
+write.csv(sample_sf %>% 
+            st_drop_geometry() %>%
+            as_tibble(), 
+          here("output", "sample", country, sprintf("%s_sample_%s.csv", country, n))
+          )
 
 # See result
 sample_sf <- regions_sf[idx_sample,]
