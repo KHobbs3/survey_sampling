@@ -1,4 +1,5 @@
 # select points only within FEM radio bounds
+# UPDATE 09-2025: select points within 100 km of major cities
 library(sf)
 library(dplyr)
 library(here)
@@ -7,9 +8,12 @@ library(mapview)
 library(digest)
 library(jsonlite)
 
+# 0. SET UP ----
 # User input
 country <- "niger"
 subfolder <- 'marion_partners'
+major_cities <- c("Badaguichiri", "Maradi", "Zinder")
+city_radius <- 100 # in kilometres
 
 # Read polygons
 poly <- st_read(sprintf("input/settlement_areas/%s/osm_settlements_unconstrained_population_2020_150m_buffer.geojson",country))
@@ -27,8 +31,9 @@ points <- points %>%
          "source",
          "geometry")
 
+
 # Set-up file path
-filepath <- sprintf('/Users/kt/Documents/work/FEM/Family Planning/Radio Reach/cloudrf/output/gpkg/%s/%s', country, subfolder)
+filepath <- sprintf('/Users/kt/Documents/work/AIM Charities/FEM/Family Planning/2. Everything Radio/Radio Reach/cloudrf/output/gpkg/%s/%s/', country, subfolder)
 
 # Get all gpkg files
 gpkg_files <- list.files(filepath, pattern = "\\.gpkg$", full.names = TRUE)
@@ -52,14 +57,31 @@ station_list <- lapply(gpkg_files, function(file) {
 })
 
 
-# Dissolve all radio stations
+# 1. Only select major cities ----
+selected_points <- points %>% filter(name %in% major_cities & place != "hamlet")
+
+# Buffer cities 
+selected_points_transformed <- st_transform(selected_points, "epsg:32632")
+selected_buffer_transformed <- st_buffer(selected_points_transformed, dist=city_radius*1000)
+selected_buffer_4326 <- st_transform(selected_buffer_transformed, "epsg:4326")
+
+# 2. Dissolve all radio stations ---
 sf::sf_use_s2(FALSE)
 
-union_result <- reduce(lapply(station_list, st_geometry), st_union)
-union_result <- st_sf(geometry = union_result)
+station_union <- reduce(lapply(station_list, st_geometry), st_union)
+station_union <- st_sf(geometry = station_union)
 
-# Select points within
-within_index <- st_within(poly, union_result)
+# Dissolve stations to x-KM radius of major selected cities
+survey_bounds <- st_intersection(station_union, selected_buffer_4326)
+
+# Visual check
+mapview(survey_bounds, col.regions='yellow') +
+  mapview(selected_buffer_4326) +
+  mapview(station_union)
+
+
+# 3. Select points within survey bounds ----
+within_index <- st_within(poly, survey_bounds)
 poly_in_stations <- poly[lengths(within_index) > 0,]
 
 # Set Unique id for poly using geometry
@@ -78,38 +100,39 @@ result <- joined %>%
     .groups = "drop"
   )
 
-# get geometry of polygons
+# Get geometry of polygons
 final <- poly_in_stations %>%
   left_join(result, by = "geom_id", suffix = c("polygon", "")) 
 
 final_simple <- final %>%
   select(geom_id,X_sum, name, place, osm_id, geometry)
 
-# optional: add boundaries
-boundary_file <- list.files(sprintf('../../General Data/HDX Boundaries/%s/', country), full.names=T)[1]
+# 4. optional: add boundaries ----
+boundary_file <- list.files(sprintf('../../General Data/HDX Boundaries/%s/', country), pattern = '\\.geojson$', full.names=T)[1]
 print(paste0("Reading boundaries for assignment: ", boundary_file))
 boundaries <- st_read(boundary_file) %>% 
   select(
-    shapeName,
+    name,
     geometry
   )
 
-# spatial join final to boundarys
+# spatial join final to boundaries
 final_simple <- final_simple %>%
   st_join(boundaries) 
 
 
-# Export
+# 5. Export ----
 st_write(final_simple, sprintf("input/settlement_areas/%s/%s_preselected.geojson",country, country),
          append=F,
          delete_dsn = TRUE)
 
 # Visualize
-mapview(final_simple[!is.na(final_simple$shapeName),], col.regions = 'purple') +
-  mapview(final_simple[is.na(final_simple$shapeName),], col.regions = "red") + 
-    mapview(union_result, col.regions = "green") 
+mapview(final_simple[!is.na(final_simple$name.x),], col.regions = 'purple') +
+  mapview(final_simple[is.na(final_simple$name.x),], col.regions = "red") + 
+    mapview(survey_bounds, col.regions = "green") 
 
 
 any(sapply(final_simple$shapeName, is_null))
+
 
        

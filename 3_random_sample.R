@@ -8,7 +8,7 @@ library(mapview)
 ## User input ----
 country <- "niger"
 n_desired_total <- 1050
-n_cluster <- 25
+n_cluster <- 16  # e.g. 16 clusters or 20 replacement clusters, for Niger
 prop_wra <- 0.20 # typical proportion of population, rounded down
 p_wra_available <- 0.25 # i assume x% of WRA will be available on day of interview
 
@@ -47,7 +47,7 @@ regions_filt <- regions %>%
 regions_sf <- regions_filt %>%
   mutate(
     population = X_sum,
-    proportion = population/sum(population),
+    proportion = round(population/sum(population),10),
     state = shapeName
   ) %>%
   select(
@@ -69,7 +69,7 @@ set.seed(1)
 
 idx_sample <- sample(
   seq_len(nrow(regions_df)), # to sample rows
-  size = n,
+  size = n_cluster,
   replace = T,
   prob = regions_df$proportion
 )
@@ -88,12 +88,12 @@ sample_sf <- sample_sf %>% mutate(
 
 ## EXPORT ----
 # Export as spatial file
-st_write(sample_sf, here("output", "sample", country, sprintf("%s_sample_%s.geojson", country, n_cluster)), 
+st_write(sample_sf, here("output", "sample", country, sprintf("%s_sample_%s_v2.geojson", country, n_cluster)), 
          append=F, delete_dsn = T)
 
 
 # export as KML
-st_write(sample_sf, here("output", "sample", country, sprintf("%s_sample_%s.kml", country, n_cluster)), 
+st_write(sample_sf, here("output", "sample", country, sprintf("%s_sample_%s_v2.kml", country, n_cluster)), 
          append=F, delete_dsn = T)
 
 # Convert to DF
@@ -103,7 +103,7 @@ sample_df <- sample_sf %>%
 
 # Export as csv
 write.csv(sample_df,
-          here("output", "sample", country, sprintf("%s_sample_%s.csv", country, n_cluster)),
+          here("output", "sample", country, sprintf("%s_sample_%s_v2.csv", country, n_cluster)),
           fileEncoding = 'cp1252'
           )
 
@@ -120,7 +120,6 @@ regions_in_bounds <- regions %>%
   filter(
     !is.na(geometry)
   )
-
 
 
 # ORIGINAL
@@ -151,7 +150,6 @@ ggplot(sample_sf, aes(x = population)) +
 
 
 # withOUT replacement
-
 idx_sample_wo <- sample(
   seq_len(nrow(regions_df)), # to sample rows
   size = n,
