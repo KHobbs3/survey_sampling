@@ -7,8 +7,8 @@ library(mapview)
 
 ## User input ----
 country <- "niger"
-n_desired_total <- 1050
-n_cluster <- 16  # e.g. 16 clusters or 20 replacement clusters, for Niger
+n_desired_total <- 990
+n_cluster <- 27  # e.g. 18 clusters + 21 replacement clusters, for Niger
 prop_wra <- 0.20 # typical proportion of population, rounded down
 p_wra_available <- 0.25 # i assume x% of WRA will be available on day of interview
 
@@ -39,7 +39,7 @@ sprintf("Total sample size: %s
 regions_filt <- regions %>%
   filter(
     X_sum >= min_pop,
-    !is.na(shapeName) # filter out-of-bonds
+    !is.na(name.y) # filter out-of-bounds
   )
 
 
@@ -48,12 +48,12 @@ regions_sf <- regions_filt %>%
   mutate(
     population = X_sum,
     proportion = round(population/sum(population),10),
-    state = shapeName
+    state = name.y
   ) %>%
   select(
     geom_id,
     place,
-    name,
+    name.x,
     state,
     population,
     proportion
@@ -65,35 +65,51 @@ regions_df <- regions_sf %>%
   as_tibble()
 
 ## Random selection ----
-set.seed(1)
+set.seed(2)
 
-idx_sample <- sample(
-  seq_len(nrow(regions_df)), # to sample rows
-  size = n_cluster,
-  replace = T,
-  prob = regions_df$proportion
-)
+# Set the number of clusters per state (or proportionally adjust this logic)
+n_states <- 3
+n_cluster_per_state <- n_cluster/n_states  # for example, 5 samples per state
 
-sample_sf <- regions_sf[idx_sample, ]
+# Stratified sampling
+sample_df <- regions_df %>%
+  group_by(state) %>%
+  slice_sample(
+    n = n_cluster_per_state,
+    replace = TRUE,
+    weight_by = proportion
+  ) %>%
+  ungroup()
+
+sample_sf <- regions_sf %>% filter(geom_id %in% sample_df$geom_id)
 
 ## Summary of sample population ----
 summary(sample_sf$population)
 
 # Get centroids, lat and lon
-sample_sf <- sample_sf %>% mutate(
-  centroid = st_centroid(geometry),
-  longitude = st_coordinates(centroid)[,1],
-  latitude = st_coordinates(centroid)[,2]
-)
+sample_sf <- sample_sf %>%
+  st_transform(32632) %>%  # 32632 is UTM zone 32N
+  mutate(
+    centroid = st_centroid(geometry)
+  ) %>%
+  # Get lon/lat by transforming centroid back to EPSG:4326
+  mutate(
+    centroid_lonlat = st_transform(centroid, 4326),
+    longitude = st_coordinates(centroid_lonlat)[,1],
+    latitude = st_coordinates(centroid_lonlat)[,2],
+    name = name.x
+  ) %>%
+  # Optionally drop the temporary projected centroid
+  select(-c(centroid,centroid_lonlat,name.x))
 
 ## EXPORT ----
 # Export as spatial file
-st_write(sample_sf, here("output", "sample", country, sprintf("%s_sample_%s_v2.geojson", country, n_cluster)), 
+st_write(sample_sf, here("output", "sample", country, sprintf("%s_sample_%s.geojson", country, n_cluster)), 
          append=F, delete_dsn = T)
 
 
 # export as KML
-st_write(sample_sf, here("output", "sample", country, sprintf("%s_sample_%s_v2.kml", country, n_cluster)), 
+st_write(sample_sf, here("output", "sample", country, sprintf("%s_sample_%s.kml", country, n_cluster)), 
          append=F, delete_dsn = T)
 
 # Convert to DF
@@ -103,7 +119,7 @@ sample_df <- sample_sf %>%
 
 # Export as csv
 write.csv(sample_df,
-          here("output", "sample", country, sprintf("%s_sample_%s_v2.csv", country, n_cluster)),
+          here("output", "sample", country, sprintf("%s_sample_%s.csv", country, n_cluster)),
           fileEncoding = 'cp1252'
           )
 

@@ -61,7 +61,7 @@ station_list <- lapply(gpkg_files, function(file) {
 selected_points <- points %>% filter(name %in% major_cities & place != "hamlet")
 
 # Buffer cities 
-selected_points_transformed <- st_transform(selected_points, "epsg:32632")
+selected_points_transformed <- st_transform(selected_points, "epsg:32632")  ## <- UPDATE
 selected_buffer_transformed <- st_buffer(selected_points_transformed, dist=city_radius*1000)
 selected_buffer_4326 <- st_transform(selected_buffer_transformed, "epsg:4326")
 
@@ -76,7 +76,7 @@ survey_bounds <- st_intersection(station_union, selected_buffer_4326)
 
 # Visual check
 mapview(survey_bounds, col.regions='yellow') +
-  mapview(selected_buffer_4326) +
+  mapview(selected_buffer_4326, col.regions='red') +
   mapview(station_union)
 
 
