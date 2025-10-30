@@ -5,3 +5,11 @@ archive/
 validation/
 input/population_rasters/
 sampling.Rproj
+.RData
+.Rhistory
+4_stratified_sample.R
+input/points/
+input/settlement_areas/niger/Readme.txt
+input/settlement_areas/niger/hotosm_ner_populated_places_polygons_geojson.geojson
+input/settlement_areas/niger/osm_settlements_unconstrained_population_2020_150m_buffer.geojson
+input/settlement_areas/niger/osm_settlements_unconstrained_population_2020_150m_buffer.qmd
