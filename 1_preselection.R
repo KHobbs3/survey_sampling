@@ -109,50 +109,49 @@ if (constrain_distance == T) {
 within_index <- st_intersects(poly, survey_bounds) # st_intersects to keep Dakar in Senegal
 poly_in_stations <- poly[lengths(within_index) > 0,]
 
-# Set Unique id for poly using geometry
+# Set Unique id for poly using geometry (if not using OSM data)
 poly_in_stations$geom_id <- sapply(st_as_text(st_geometry(poly_in_stations)), digest, algo = "sha1")
-unique(poly_in_stations$)
 
 # Spatial join points to polygon get name, and type columns per polygon
-joined <- st_join(points, poly_in_stations, join = st_within, left = FALSE, suffix = c("_pts", ""))
+# joined <- st_join(points, poly_in_stations, join = st_within, left = FALSE, suffix = c("_pts", ""))
 
 
-mapview(joined, col.regions='red') + 
-  mapview(points, col.regions='yellow') + 
-  mapview(poly_in_stations)
-
-# Group points that are within the same settlement cluster
-result <- joined %>%
-  st_drop_geometry() %>%
-  group_by(geom_id) %>%
-  summarise(
-    name = paste(unique(name), collapse = "; "),
-    admin = paste(unique(Admin4Name), collapse = "; "),
-    place = paste(unique(place), collapse = "; "),
-    # osm_ids = paste(unique(osm_id), collapse = "; "),
-    .groups = "drop"
-  )
-
-# Convert geom_ids to string
-poly_in_stations$geom_id <- as.character(poly_in_stations$geom_id)
-
-# Add the cluster geometry that the grouped points reside in 
-final <- poly_in_stations %>%
-  left_join(result, x = "geom_id", suffix = c("polygon", "")) 
+# # Group points that are within the same settlement cluster
+# result <- joined %>%
+#   st_drop_geometry() %>%
+#   group_by(geom_id) %>%
+#   summarise(
+#     name = paste(unique(name), collapse = "; "), # NAME NEEDS TO CORRESPOND WITH GEOM_ID FROM POLYGON
+#     admin = paste(unique(Admin4Name), collapse = "; "),
+#     place = paste(unique(place), collapse = "; "),
+#     # osm_ids = paste(unique(osm_id), collapse = "; "),
+#     .groups = "drop"
+#   ) 
+# 
+# mapview(poly_in_stations) +
+#   mapview(joined, col.region='yellow')
+# 
+# # Convert geom_ids to string
+# poly_in_stations$geom_id <- as.character(poly_in_stations$geom_id)
+# 
+# # Add the cluster geometry that the grouped points reside in
+# final <- poly_in_stations %>%
+#   left_join(result, by = "geom_id", suffix = c("polygon", ""))
+# 
 
 # 4. Add boundaries ----
-# spatial join final to boundaries
-final <- final %>%
+# spatial join to boundaries
+final <- poly_in_stations %>%
   st_join(boundaries) 
 
 
-mapview(joined, col.regions = 'red') +
-  mapview(final, col.regions='blue')
+mapview(final, col.regions='blue')
 
 # 5. Export ----
 st_write(final, sprintf("output/preselection/%s/0_%s_surveybounds%s.geojson",country, country, suffix),
          append=F,
          delete_dsn = TRUE)
+
 st_write(final, sprintf("output/preselection/%s/0_%s_surveybounds%s.kml",country, country, suffix),
          append=F,
          delete_dsn = TRUE)
@@ -161,4 +160,3 @@ st_write(final, sprintf("output/preselection/%s/0_%s_surveybounds%s.kml",country
 st_write(selected_points_transformed, sprintf("output/preselection/%s/0_%s_points%s.kml",country, country, suffix),
          append=F,
          delete_dsn = TRUE)
-

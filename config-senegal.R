@@ -80,7 +80,7 @@ p_available <- 0.20 # i assume x% of MWRA will be available on day of interview
 
 # --- Cluster allocation from your chart (total should match n_cluster = 30) ---
 alloc_df <- tibble(
-  strata_description = c("Dakar", "Thiès", "Kaolack", "Fatick", "Diourbel"),
+  strata_description = c("Dakar", "Thies", "Kaolack", "Fatick", "Diourbel"),
   n_clusters_target  = c(11, 7, 4, 2, 6)*2 # multiply by 2 for replacements
 )
 

@@ -11,8 +11,8 @@ source("config-senegal.R")
 
 # Read polygons (run after 1_preselection.R to get suffix, or manually define)
 regions <- st_read(here("output", "preselection", sprintf("%s/2_%s_settlement_populations_%s.geojson", country, country, suffix)))
-
-# deduplicate
+mapview(regions)
+# deduplicate (optional)
 regions_dedupe <- regions %>% distinct(geom_id, .keep_all = TRUE)
 
 # Determine minimum population size per cluster ----
@@ -51,7 +51,7 @@ regions_sf <- regions_filt %>%
     geom_id,
     Admin1Name,
     popPlace_1,
-    name,
+    # name,
     Admin4Name,
     population,
     proportion
