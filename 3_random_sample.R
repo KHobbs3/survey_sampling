@@ -1,25 +1,24 @@
 # randomly select towns/villages..etc. ----
 library(sf)
 library(dplyr)
+library(tibble)
 library(here)
 library(purrr)
 library(mapview)
 
-## User input ----
-country <- "niger"
-n_desired_total <- 990
-n_cluster <- 27  # e.g. 18 clusters + 21 replacement clusters, for Niger
-prop_wra <- 0.20 # typical proportion of population, rounded down
-p_wra_available <- 0.25 # i assume x% of WRA will be available on day of interview
+# 0. SET UP ----
+source("config-senegal.R")
 
-# Read polygons
-regions <- st_read(sprintf("input/settlement_areas/%s/%s_preselected.geojson",country, country))
+# Read polygons (run after 1_preselection.R to get suffix, or manually define)
+regions <- st_read(here("output", "preselection", sprintf("%s/2_%s_settlement_populations_%s.geojson", country, country, suffix)))
 
+# deduplicate
+regions_dedupe <- regions %>% distinct(geom_id, .keep_all = TRUE)
 
-## Determine minimum population size per cluster ----
+# Determine minimum population size per cluster ----
 n_per_cluster <- n_desired_total / n_cluster
 
-min_pop <- n_per_cluster / (prop_wra*p_wra_available)
+min_pop <- n_per_cluster / (prop_qual*p_available)
 
 sprintf("Total sample size: %s
         Total clusters:%s
@@ -36,25 +35,24 @@ sprintf("Total sample size: %s
 # - this is a conservative assumption because WRA comprise around 25% of populations or less. 
 # I round down to 20% to be conservative. I expect 25% will be unavailable on day of interview.
 # npop = (n WRA to interview) / probability of interviewing WRA (20% x 25%) = 20/10% = 840
-regions_filt <- regions %>%
+regions_filt <- regions_dedupe %>%
   filter(
-    X_sum >= min_pop,
-    !is.na(name.y) # filter out-of-bounds
+    population_coverage >= min_pop
   )
 
 
-## Clean result and add selection probabilities based off population proportion ----
+# Clean result and add selection probabilities based off population proportion ----
 regions_sf <- regions_filt %>%
-  mutate(
-    population = X_sum,
-    proportion = round(population/sum(population),10),
-    state = name.y
+  dplyr::mutate(
+    population = population_coverage,
+    proportion = round(population/sum(population),10)
   ) %>%
-  select(
+  dplyr::select(
     geom_id,
-    place,
-    name.x,
-    state,
+    Admin1Name,
+    popPlace_1,
+    name,
+    Admin4Name,
     population,
     proportion
   ) 
@@ -67,49 +65,56 @@ regions_df <- regions_sf %>%
 ## Random selection ----
 set.seed(2)
 
-# Set the number of clusters per state (or proportionally adjust this logic)
-n_states <- 3
-n_cluster_per_state <- n_cluster/n_states  # for example, 5 samples per state
+# Add strata to your sampling frame
+regions_df2 <- regions_df %>%
+  # left_join(dept_to_strata, join_by(ADM1_FR == "admin_name")) %>%
+  left_join(alloc_df, by = c("Admin1Name" = "strata_description"), keep=T)
 
-# Stratified sampling
-sample_df <- regions_df %>%
-  group_by(state) %>%
-  slice_sample(
-    n = n_cluster_per_state,
-    replace = TRUE,
-    weight_by = proportion
-  ) %>%
-  ungroup()
+# --- Stratified sampling: n per strata from chart, weight within strata by `proportion` ---
+sample_df <- regions_df2 %>%
+  split(.$strata_description) %>%
+  lapply(\(x) slice_sample(x, n = unique(x$n_clusters_target)[1],
+                           replace = F, weight_by = proportion)) %>%
+  bind_rows()
 
-sample_sf <- regions_sf %>% filter(geom_id %in% sample_df$geom_id)
+# Check that the correct allocation happened
+sample_df %>%
+  group_by(.$strata_description) %>% count()
+  
+# Create spatial file of sample
+sample_sf <- regions_sf %>% 
+  # dplyr::select(
+  #   geom_id,
+  #   geometry
+  # ) %>%
+  right_join(sample_df, by="geom_id", suffix = c("", "_sample"))
+
+nrow(sample_sf) == nrow(sample_df)
 
 ## Summary of sample population ----
-summary(sample_sf$population)
+summary(sample_sf$population_sample)
 
 # Get centroids, lat and lon
 sample_sf <- sample_sf %>%
-  st_transform(32632) %>%  # 32632 is UTM zone 32N
-  mutate(
-    centroid = st_centroid(geometry)
-  ) %>%
-  # Get lon/lat by transforming centroid back to EPSG:4326
+  st_transform(32632) %>%  # UTM zone 32N
+  mutate(centroid = st_centroid(geometry)) %>%
   mutate(
     centroid_lonlat = st_transform(centroid, 4326),
-    longitude = st_coordinates(centroid_lonlat)[,1],
-    latitude = st_coordinates(centroid_lonlat)[,2],
-    name = name.x
+    longitude = st_coordinates(centroid_lonlat)[, 1],
+    latitude  = st_coordinates(centroid_lonlat)[, 2]
   ) %>%
-  # Optionally drop the temporary projected centroid
-  select(-c(centroid,centroid_lonlat,name.x))
+  dplyr::select(-centroid, -centroid_lonlat)
 
 ## EXPORT ----
 # Export as spatial file
-st_write(sample_sf, here("output", "sample", country, sprintf("%s_sample_%s.geojson", country, n_cluster)), 
+
+dir.create(file.path(here("output", "sample", country)))
+st_write(sample_sf, here("output", "sample", country, sprintf("%s_sample_%s_%s.geojson", country, n_cluster, suffix)), 
          append=F, delete_dsn = T)
 
 
 # export as KML
-st_write(sample_sf, here("output", "sample", country, sprintf("%s_sample_%s.kml", country, n_cluster)), 
+st_write(sample_sf, here("output", "sample", country, sprintf("%s_sample_%s_%s.kml", country, n_cluster, suffix)), 
          append=F, delete_dsn = T)
 
 # Convert to DF
@@ -119,70 +124,9 @@ sample_df <- sample_sf %>%
 
 # Export as csv
 write.csv(sample_df,
-          here("output", "sample", country, sprintf("%s_sample_%s.csv", country, n_cluster)),
-          fileEncoding = 'cp1252'
+          here("output", "sample", country, sprintf("%s_sample_%s_%s.csv", country, n_cluster, suffix)),
+          fileEncoding = 'utf-8'
           )
 
 ## VISUALISE ----
 mapview(sample_sf, col.regions = 'purple')
-
-
-# Compare representativeness of sample to original population ----
-library(ggplot2)
-
-## set-up samples ----
-# Filter out-of-bounds clusters
-regions_in_bounds <- regions %>%
-  filter(
-    !is.na(geometry)
-  )
-
-
-# ORIGINAL
-ggplot(regions_in_bounds, aes(x = X_sum)) +
-  geom_histogram(bins = 50, fill = "steelblue", color = "white") +
-  labs(title = "Full Population",
-       x = "Population",
-       y = "Frequency") +
-  theme_minimal()
-
-
-# ORIGINAL FILTTERED
-ggplot(regions_filt, aes(x = X_sum)) +
-  geom_histogram(bins = 50, fill = "steelblue", color = "white") +
-  labs(title = sprintf("Population > %s",min_pop),
-       x = "Population",
-       y = "Frequency") +
-  theme_minimal()
-
-# SAMPLE
-# with replacement
-ggplot(sample_sf, aes(x = population)) +
-  geom_histogram(bins = 50, fill = "steelblue", color = "white") +
-  labs(title = "Sampling with replacement",
-       x = "Population",
-       y = "Frequency") +
-  theme_minimal()
-
-
-# withOUT replacement
-idx_sample_wo <- sample(
-  seq_len(nrow(regions_df)), # to sample rows
-  size = n,
-  replace = F,
-  prob = regions_df$proportion
-)
-
-sample_sf_wo <- regions_sf[idx_sample_wo, ]
-
-
-## PLOTS ----
-ggplot() +
-  geom_boxplot(data = sample_sf_wo,
-               aes(x = "Without replacement", y = population), fill = "blue") +
-  geom_boxplot(data = sample_sf,
-               aes(x ="With replacement", y = population), fill = "red") +
-  geom_boxplot(data = regions_filt,
-               aes(x = ">Min Pop Target Population", y = X_sum), fill = "grey") +
-  geom_boxplot(data = regions_in_bounds,
-               aes(x = "Full Target Population", y = X_sum), fill = "green")

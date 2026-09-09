@@ -1,6 +1,5 @@
 .DS_Store
 .Rproj.user/
-Delete after Aug 1/
 archive/
 validation/
 input/population_rasters/
@@ -9,7 +8,11 @@ sampling.Rproj
 .Rhistory
 4_stratified_sample.R
 input/points/
+input/boundaries/*/*.*
 input/settlement_areas/niger/Readme.txt
 input/settlement_areas/niger/hotosm_ner_populated_places_polygons_geojson.geojson
 input/settlement_areas/niger/osm_settlements_unconstrained_population_2020_150m_buffer.geojson
 input/settlement_areas/niger/osm_settlements_unconstrained_population_2020_150m_buffer.qmd
+input/settlement_areas/niger/*.kml
+output/sample/*/*.kml
+output/preselection/*/*.kml

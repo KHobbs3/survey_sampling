@@ -4,23 +4,27 @@ This repository contains R scripts for selecting and analyzing settlements withi
 
 ## Contents
 
+`config.R`
+
+-   Country-specific inputs for sampling.
+
 ### `1_preselection.R`
 
 > Select settlements (polygons) and points that are within the FEM radio coverage area.
 
 -   Reads:
-    -   Settlement polygons from GeoJSON.
+    -   Settlement polygons from GeoJSON -- with column `X_sum` indicating population
+        -   if this column does not exist, run `Zonal Statistics` on QGIS with the chosen population grid.
     -   Candidate points (villages, towns, etc.) from Shapefile.
-    -   FEM radio coverage polygons from GPKG files.
--   Dissolves all radio coverage polygons into a single area of coverage.
+    -   (optional) FEM radio coverage polygons from GPKG files. This is to add an optional geographic constraint on the sampling frame.
+-   (optional) Dissolves all radio coverage polygons into a single area of coverage.
+-   Adds x-KM buffer to main city points to constrain sampling frame, as designated in config.R.
 -   Selects only settlement polygons that intersect with the coverage area.
--   Joins points to selected polygons to add metadata.
 -   Outputs:
-    -   GeoJSON of selected settlement polygons within coverage.
+    -   GeoJSON and KML of selected settlement polygons within coverage.
     -   Visualization of settlements and radio coverage area.
 
-Output file:\
-`input/settlement_areas/<country>/<country>_preselected.geojson`
+Output [[file:\\\\](file:\\){.uri}]([file:\\](file:\){.uri}){.uri} `input/settlement_areas/<country>/<country>_preselected.geojson`
 
 ------------------------------------------------------------------------
 
@@ -38,8 +42,7 @@ Output file:\
     -   Validation GeoJSON for last processed point.
     -   Map visualizations for quality check.
 
-Output file:\
-`output/<country>_summary_reach_<km>km.csv`
+Output [[file:\\\\](file:\\){.uri}]([file:\\](file:\){.uri}){.uri} `output/<country>_summary_reach_<km>km.csv`
 
 Validation output:\
 `validation/<country>/<country>_point_validation.geojson`
@@ -56,11 +59,10 @@ Validation output:\
 -   Computes selection probabilities proportional to population.
 -   Randomly samples `n` settlements (with replacement) based on probabilities.
 -   Outputs:
-    -   GeoJSON of sampled settlements.
+    -   GeoJSON and KML of sampled settlements.
     -   Visualization of selected points.
 
-Output file:\
-`output/sample/<country>/<country>_sample_<n>.geojson`
+Output [[file:\\\\](file:\\){.uri}]([file:\\](file:\){.uri}){.uri} `output/sample/<country>/<country>_sample_<n>.geojson`
 
 ------------------------------------------------------------------------
 
@@ -68,4 +70,4 @@ Output file:\
 
 All scripts are written in R and depend on the following packages: - `sf` - `dplyr` - `here` - `purrr` - `mapview` - `digest` - `jsonlite` - `terra` - `raster` - `openxlsx` - `stringr` - `exactextractr`
 
-Install them with: \`\`\`r install.packages(c( "sf", "dplyr", "here", "purrr", "mapview", "digest", "jsonlite", "terra", "raster", "openxlsx", "stringr", "exactextractr" ))
+Install them with: `r install.packages(c( "sf", "dplyr", "here", "purrr", "mapview", "digest", "jsonlite", "terra", "raster", "openxlsx", "stringr", "exactextractr" ))`
