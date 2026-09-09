@@ -111,7 +111,7 @@ if (constrain_distance == T) {
 
 
 # 3. Select points within survey bounds ----
-within_index <- st_within(poly, survey_bounds)
+within_index <- st_intersects(poly, survey_bounds) # st_intersects to keep Dakar in Senegal
 poly_in_stations <- poly[lengths(within_index) > 0,]
 
 
