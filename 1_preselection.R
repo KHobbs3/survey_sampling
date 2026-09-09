@@ -15,10 +15,11 @@ source("config-senegal.R")
 
 # Read polygons
 poly <- st_read(sprintf("input/settlement_areas/%s/%s", country, settlement_polys)) %>%
-  st_make_valid()
+  st_make_valid() 
 
 # Read boundary file
-boundaries <- st_read(sprintf("input/boundaries/%s/%s", country, boundary_file))
+boundaries <- st_read(sprintf("input/boundaries/%s/%s", country, boundary_file)) %>%
+  st_make_valid()
 
 
 if (constrain_distance == T) {
@@ -44,8 +45,9 @@ if (constrain_distance == T) {
     return(radio_polygon)
     })
 
-  sprintf("Applying constraints: %s km from any of : %s", city_radius, major_cities)
-  print("===============================")
+    sprintf("Applying constraints: %s km from any of : %s", city_radius, major_cities)
+    print("===============================")
+   
     # Read points
     points = st_read(sprintf("input/points/%s/%s", country, settlement_points)) %>%
       dplyr::select(
@@ -55,10 +57,7 @@ if (constrain_distance == T) {
     
   
     # 2. Only select major cities ----
-    selected_points <- points %>% filter(Admin4Name %in% major_cities)# & place != "hamlet")
-    
-    # # Benin - keep only one dogbo and albomey-calavi
-    # selected_points <- selected_points %>% filter(!osm_id %in% c('3862741927', '10890183156', '7615581115'))
+    selected_points <- points %>% filter(name %in% major_cities)
     
     # Buffer cities 
     selected_points_transformed <- st_transform(selected_points, aerial_crs)
@@ -67,13 +66,12 @@ if (constrain_distance == T) {
     
     
     # Dissolve stations to x-KM radius of major selected cities
-    survey_bounds <- st_intersection(boundaries, selected_buffer_4326) %>%
-      st_union() %>%
-
-      st_make_valid()
+    survey_bounds <- st_intersection(st_union(boundaries), st_union(selected_buffer_4326)) %>%
+      st_union()
+    survey_bounds <- st_sf(geom_id = "survey_bounds", geometry = survey_bounds)
     
     # Check:
-    mapview(survey_bounds, col.regions='yellow') +
+    mapview(survey_bounds, col.regions='yellow') + 
       mapview(boundaries) +
       mapview(selected_buffer_4326, col.regions='red')
     
@@ -89,10 +87,7 @@ if (constrain_distance == T) {
   
   
   # 2. Only select major cities ----
-  selected_points <-  points %>% filter(Admin4Name %in% major_cities) #filter(name %in% major_cities & place != "hamlet")
-  
-  # # Benin - keep only one dogbo and albomey-calavi
-  # selected_points <- selected_points %>% filter(!osm_id %in% c('3862741927', '10890183156', '7615581115'))
+  selected_points <-  points %>% filter(name %in% major_cities) #filter(name %in% major_cities & place != "hamlet")
   
   # Buffer cities 
   selected_points_transformed <- st_transform(selected_points, aerial_crs)
@@ -114,38 +109,45 @@ if (constrain_distance == T) {
 within_index <- st_intersects(poly, survey_bounds) # st_intersects to keep Dakar in Senegal
 poly_in_stations <- poly[lengths(within_index) > 0,]
 
-
 # Set Unique id for poly using geometry
 poly_in_stations$geom_id <- sapply(st_as_text(st_geometry(poly_in_stations)), digest, algo = "sha1")
+unique(poly_in_stations$)
 
 # Spatial join points to polygon get name, and type columns per polygon
-# joined <- st_join(points, poly_in_stations, suffix = c("", "_polygon"))
-joined <- st_join(points, poly_in_stations, join = st_within, left = FALSE, suffix = c("", "_polygon"))
-mapview(joined)
+joined <- st_join(points, poly_in_stations, join = st_within, left = FALSE, suffix = c("_pts", ""))
 
 
+mapview(joined, col.regions='red') + 
+  mapview(points, col.regions='yellow') + 
+  mapview(poly_in_stations)
+
+# Group points that are within the same settlement cluster
 result <- joined %>%
   st_drop_geometry() %>%
   group_by(geom_id) %>%
   summarise(
-    name = paste(unique(Admin4Name), collapse = "; "),
-    # place = paste(unique(popPlace_1), collapse = "; "),
+    name = paste(unique(name), collapse = "; "),
+    admin = paste(unique(Admin4Name), collapse = "; "),
+    place = paste(unique(place), collapse = "; "),
     # osm_ids = paste(unique(osm_id), collapse = "; "),
     .groups = "drop"
   )
 
-# Get geometry of polygons
+# Convert geom_ids to string
 poly_in_stations$geom_id <- as.character(poly_in_stations$geom_id)
-result$geom_id <- as.character(result$geom_id)
 
+# Add the cluster geometry that the grouped points reside in 
 final <- poly_in_stations %>%
-  left_join(result, by = "geom_id", suffix = c("polygon", "")) 
+  left_join(result, x = "geom_id", suffix = c("polygon", "")) 
 
 # 4. Add boundaries ----
 # spatial join final to boundaries
 final <- final %>%
   st_join(boundaries) 
 
+
+mapview(joined, col.regions = 'red') +
+  mapview(final, col.regions='blue')
 
 # 5. Export ----
 st_write(final, sprintf("output/preselection/%s/0_%s_surveybounds%s.geojson",country, country, suffix),
